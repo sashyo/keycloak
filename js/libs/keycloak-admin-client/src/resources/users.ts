@@ -91,13 +91,22 @@ export class Users extends Resource<{ realm?: string }> {
       method: "PUT",
       path: "/profile",
     },
-  );
-
-  public getProfileMetadata = this.makeRequest<{}, UserProfileMetadata>({
-    method: "GET",
-    path: "/profile/metadata",
+    );
+    
+    public getProfileMetadata = this.makeRequest<{}, UserProfileMetadata>({
+      method: "GET",
+      path: "/profile/metadata",
+    });
+    
+    public regenerateJwtProofs = this.makeRequest<
+    { id: string; clientIds: string[] },
+    void
+  >({
+    method: "POST",
+    path: "/{id}/regenerate/proof",
+    urlParamKeys: ["id", "clientUniqueId"],
+    payloadKey: "clientIds",
   });
-
   /**
    * role mappings
    */
@@ -210,6 +219,7 @@ export class Users extends Resource<{ realm?: string }> {
     path: "/{id}/role-mappings/clients/{clientUniqueId}/composite",
     urlParamKeys: ["id", "clientUniqueId"],
   });
+
 
   /**
    * Send a update account email to the user

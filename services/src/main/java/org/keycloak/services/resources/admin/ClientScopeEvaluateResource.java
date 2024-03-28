@@ -236,7 +236,7 @@ public class ClientScopeEvaluateResource {
         });
     }
 
-    private<R> R sessionAware(UserModel user, String scopeParam, BiFunction<UserSessionModel, ClientSessionContext,R> function) {
+    private <R> R sessionAware(UserModel user, String scopeParam, BiFunction<UserSessionModel, ClientSessionContext,R> function) {
         AuthenticationSessionModel authSession = null;
         AuthenticationSessionManager authSessionManager = new AuthenticationSessionManager(session);
 

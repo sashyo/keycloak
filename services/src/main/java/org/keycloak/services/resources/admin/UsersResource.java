@@ -16,9 +16,17 @@
  */
 package org.keycloak.services.resources.admin;
 
+import com.apicatalog.jsonld.json.JsonMapBuilder;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.ws.rs.client.ClientBuilder;
+import jakarta.ws.rs.client.Entity;
+import jakarta.ws.rs.core.Application;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.extensions.Extension;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.NoCache;
@@ -26,25 +34,26 @@ import org.keycloak.common.ClientConnection;
 import org.keycloak.common.Profile;
 import org.keycloak.events.admin.OperationType;
 import org.keycloak.events.admin.ResourceType;
-import org.keycloak.models.Constants;
-import org.keycloak.models.GroupModel;
-import org.keycloak.models.KeycloakSession;
-import org.keycloak.models.ModelDuplicateException;
-import org.keycloak.models.ModelException;
-import org.keycloak.models.RealmModel;
-import org.keycloak.models.UserModel;
-import org.keycloak.models.UserSessionModel;
+import org.keycloak.models.*;
 import org.keycloak.models.light.LightweightUserAdapter;
 import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.models.utils.RepresentationToModel;
 import org.keycloak.policy.PasswordPolicyNotMetException;
+import org.keycloak.protocol.oidc.TokenManager;
+import org.keycloak.representations.AccessToken;
+import org.keycloak.representations.JsonWebToken;
+import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.keycloak.services.ErrorResponse;
+import org.keycloak.services.ErrorResponseException;
 import org.keycloak.services.resources.KeycloakOpenAPI;
 import org.keycloak.services.resources.admin.permissions.AdminPermissionEvaluator;
 import org.keycloak.services.resources.admin.permissions.UserPermissionEvaluator;
+import org.keycloak.services.util.JwtProofUtil;
+import org.keycloak.storage.ReadOnlyException;
 import org.keycloak.userprofile.UserProfile;
 import org.keycloak.userprofile.UserProfileProvider;
+import org.keycloak.utils.JsonUtils;
 import org.keycloak.utils.SearchQueryUtils;
 
 import jakarta.ws.rs.Consumes;
@@ -59,13 +68,14 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
+
+import java.net.URI;
+import java.net.URLEncoder;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -148,6 +158,15 @@ public class UsersResource {
             UserResource.updateUserFromRep(profile, user, rep, session, false);
             RepresentationToModel.createFederatedIdentities(rep, session, realm, user);
             RepresentationToModel.createGroups(session, rep, realm, user);
+
+            // TODO: GET PROOF SIGNED AND STORE IT IN DB
+            Stream<ClientModel> clientModelStream = realm.getClientsStream();
+            clientModelStream.forEach(client -> {
+                var jwtProofUtil = new JwtProofUtil(session, auth);
+
+                System.out.println(jwtProofUtil.getJwtProof(user, client));
+
+            });
 
             RepresentationToModel.createCredentials(rep, session, realm, user, true);
             adminEvent.operation(OperationType.CREATE).resourcePath(session.getContext().getUri(), user.getId()).representation(rep).success();
@@ -459,6 +478,48 @@ public class UsersResource {
         return toRepresentation(realm, usersEvaluator, briefRepresentation, userModels);
     }
 
+    /**
+     * Add client-level roles to the user role mapping
+     *
+     * @param clientIds
+     */
+    @Path("{userId}/regenerate/proof")
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Tag(name = KeycloakOpenAPI.Admin.Tags.CLIENT_ROLE_MAPPINGS)
+    @Operation( summary = "resign client-level roles to the user role mapping")
+    @APIResponse(responseCode = "204", description = "No Content")
+    public void regenerateJwtProofs(@PathParam("userId")String userId,
+                                    @Parameter(description = "Client roles that have been added")List<String> clientIds) {
+        UserPermissionEvaluator userPermissionEvaluator = auth.users();
+        userPermissionEvaluator.requireQuery();
+        try {
+            for (String clientId : clientIds) {
+                ClientModel client = realm.getClientById(clientId);
+                UserModel user = session.users().getUserById(realm, userId);
+                Stream<RoleModel> clientRoles = user.getClientRoleMappingsStream(client);
+                if (!client.getId().equals(clientId)) {
+                    throw new NotFoundException("Client not found");
+                }
+                if (!user.getId().equals(userId)) {
+                    throw new NotFoundException("User not found");
+                }
+
+                var jwtProofUtil = new JwtProofUtil(session, auth);
+                clientRoles.forEach(role ->{
+                    var newJwtProof = jwtProofUtil.getJwtProof(user, client);
+                    System.out.println(newJwtProof);
+                });
+
+            }
+        } catch (ModelException | ReadOnlyException me) {
+            logger.warn(me.getMessage(), me);
+            throw new ErrorResponseException("invalid_request", "Could resign user client role mappings!", Response.Status.BAD_REQUEST);
+        }
+
+        adminEvent.operation(OperationType.UPDATE).resourcePath(session.getContext().getUri()).representation(clientIds).success();
+    }
+
     private Stream<UserRepresentation> toRepresentation(RealmModel realm, UserPermissionEvaluator usersEvaluator, Boolean briefRepresentation, Stream<UserModel> userModels) {
         boolean briefRepresentationB = briefRepresentation != null && briefRepresentation;
         boolean canViewGlobal = usersEvaluator.canView();
@@ -473,4 +534,29 @@ public class UsersResource {
                     return userRep;
                 });
     }
+
+//    private String getJwtProof(UserModel user, ClientModel client) {
+//        logger.debugf("generateExampleAccessToken invoked. User: %s, Scope param: %s", user.getUsername(), "openId");
+//
+//        // Set a specific client to a keycloak session. This is done, so we can get the scope for a client.
+//        // Clients have different scope requirement which modifies the access token that is returned.
+//        KeycloakSession newSessionForSpecificClient = session;
+//        newSessionForSpecificClient.getContext().setClient(client);
+//
+//        ClientScopeEvaluateResource clientScopeEvaluateResource = new ClientScopeEvaluateResource(newSessionForSpecificClient, session.getContext().getUri(), realm, auth, client, clientConnection);
+//
+//        ObjectMapper objMapper = new ObjectMapper();
+//        objMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
+//
+//
+//        AccessToken accessToken = clientScopeEvaluateResource.generateExampleAccessToken("openId", user.getId());
+//
+//        try {
+//            return objMapper.writeValueAsString(accessToken);
+//
+//        } catch (JsonProcessingException e) {
+//            throw new RuntimeException(e);
+//        }
+//    }
+
 }

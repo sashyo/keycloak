@@ -39,22 +39,7 @@ import org.keycloak.events.EventBuilder;
 import org.keycloak.events.EventType;
 import org.keycloak.events.admin.OperationType;
 import org.keycloak.events.admin.ResourceType;
-import org.keycloak.models.AuthenticatedClientSessionModel;
-import org.keycloak.models.ClientModel;
-import org.keycloak.models.Constants;
-import org.keycloak.models.FederatedIdentityModel;
-import org.keycloak.models.GroupModel;
-import org.keycloak.models.IdentityProviderModel;
-import org.keycloak.models.KeycloakSession;
-import org.keycloak.models.ModelDuplicateException;
-import org.keycloak.models.ModelException;
-import org.keycloak.models.RealmModel;
-import org.keycloak.models.UserConsentModel;
-import org.keycloak.models.UserCredentialModel;
-import org.keycloak.models.UserLoginFailureModel;
-import org.keycloak.models.UserManager;
-import org.keycloak.models.UserModel;
-import org.keycloak.models.UserSessionModel;
+import org.keycloak.models.*;
 import org.keycloak.models.light.LightweightUserAdapter;
 import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.models.utils.RepresentationToModel;
@@ -81,6 +66,7 @@ import org.keycloak.services.messages.Messages;
 import org.keycloak.services.resources.KeycloakOpenAPI;
 import org.keycloak.services.resources.LoginActionsService;
 import org.keycloak.services.resources.admin.permissions.AdminPermissionEvaluator;
+import org.keycloak.services.util.JwtProofUtil;
 import org.keycloak.services.validation.Validation;
 import org.keycloak.storage.ReadOnlyException;
 import org.keycloak.userprofile.UserProfile;
@@ -215,6 +201,7 @@ public class UserResource {
             if (session.getTransactionManager().isActive()) {
                 session.getTransactionManager().commit();
             }
+
             return Response.noContent().build();
         } catch (ModelDuplicateException e) {
             session.getTransactionManager().setRollbackOnly();
@@ -1028,6 +1015,8 @@ public class UserResource {
         }
     }
 
+
+
     /**
      * Converts the specified {@link UserSessionModel} into a {@link UserSessionRepresentation}.
      *
@@ -1098,5 +1087,27 @@ public class UserResource {
             this.clientId = clientId;
             this.lifespan = lifespan;
         }
+    }
+
+    // TODO: can this be moved out somewhere else? its own file so we can manage it better.
+    //  May be called in multiple places
+    //  lives under UsersResourc.java
+    private Set<String> getUserRolesAndSign(UserModel user) {
+        Set<String> rolesSet = new HashSet<>();
+
+        //TODO: redo final form, atm just single strings per client and realm
+        user.getRoleMappingsStream().forEach(role ->{
+            if (role.isClientRole()){
+                String clientId = role.getContainer().getId();
+                String testRoleSet = clientId + ":" + role.getName();
+                rolesSet.add(testRoleSet);
+            }
+            else {
+                String realmTestSet = "REALM:" + role.getName();
+                rolesSet.add(realmTestSet);
+            }
+        });
+
+        return rolesSet;
     }
 }

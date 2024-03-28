@@ -25,16 +25,11 @@ import org.jboss.logging.Logger;
 import org.jboss.resteasy.reactive.NoCache;
 
 import jakarta.ws.rs.NotFoundException;
+import org.keycloak.models.*;
 import org.keycloak.services.resources.KeycloakOpenAPI;
 import org.keycloak.services.resources.admin.permissions.AdminPermissionEvaluator;
 import org.keycloak.events.admin.OperationType;
 import org.keycloak.events.admin.ResourceType;
-import org.keycloak.models.ClientModel;
-import org.keycloak.models.KeycloakSession;
-import org.keycloak.models.ModelException;
-import org.keycloak.models.RealmModel;
-import org.keycloak.models.RoleMapperModel;
-import org.keycloak.models.RoleModel;
 import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.services.ErrorResponseException;
@@ -51,7 +46,10 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.core.UriInfo;
+
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -177,9 +175,7 @@ public class ClientRoleMappingsResource {
             logger.warn(me.getMessage(), me);
             throw new ErrorResponseException("invalid_request", "Could not add user role mappings!", Response.Status.BAD_REQUEST);
         }
-
         adminEvent.operation(OperationType.CREATE).resourcePath(uriInfo).representation(roles).success();
-
     }
 
     /**
@@ -221,4 +217,5 @@ public class ClientRoleMappingsResource {
 
         adminEvent.operation(OperationType.DELETE).resourcePath(uriInfo).representation(roles).success();
     }
+
 }

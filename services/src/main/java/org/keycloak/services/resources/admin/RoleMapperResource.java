@@ -28,13 +28,7 @@ import jakarta.ws.rs.NotFoundException;
 import org.keycloak.common.ClientConnection;
 import org.keycloak.events.admin.OperationType;
 import org.keycloak.events.admin.ResourceType;
-import org.keycloak.models.ClientModel;
-import org.keycloak.models.KeycloakSession;
-import org.keycloak.models.ModelException;
-import org.keycloak.models.RealmModel;
-import org.keycloak.models.RoleContainerModel;
-import org.keycloak.models.RoleMapperModel;
-import org.keycloak.models.RoleModel;
+import org.keycloak.models.*;
 import org.keycloak.models.utils.ModelToRepresentation;
 import org.keycloak.representations.idm.ClientMappingsRepresentation;
 import org.keycloak.representations.idm.MappingsRepresentation;
@@ -42,6 +36,7 @@ import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.services.ErrorResponseException;
 import org.keycloak.services.resources.KeycloakOpenAPI;
 import org.keycloak.services.resources.admin.permissions.AdminPermissionEvaluator;
+import org.keycloak.services.util.JwtProofUtil;
 import org.keycloak.storage.ReadOnlyException;
 
 import jakarta.ws.rs.Consumes;
@@ -56,10 +51,8 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+
+import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -243,6 +236,9 @@ public class RoleMapperResource {
                 auth.roles().requireMapRole(roleModel);
                 roleMapper.grantRole(roleModel);
             }
+
+
+
         } catch (ModelException | ReadOnlyException me) {
             logger.warn(me.getMessage(), me);
             throw new ErrorResponseException("invalid_request", "Could not add user role mappings!", Response.Status.BAD_REQUEST);
@@ -309,6 +305,28 @@ public class RoleMapperResource {
                 clientModel, adminEvent,
                 managePermission, viewPermission);
         return resource;
-
     }
+
+
+
+//    // TODO: can this be moved out somewhere else? its own file so we can manage it better.
+//    //  May be called in multiple places
+//    private Set<String> getUserRolesAndSign(Stream<RoleModel> roleModelStream) {
+//        Set<String> rolesSet = new HashSet<>();
+//
+//        //TODO: redo final form, atm just single strings per client and realm
+//        roleModelStream.forEach(role ->{
+//            if (role.isClientRole()){
+//                String clientId = role.getContainer().getId();
+//                String testRoleSet = clientId + ":" + role.getName();
+//                rolesSet.add(testRoleSet);
+//            }
+//            else {
+//                String realmTestSet = "REALM:" + role.getName();
+//                rolesSet.add(realmTestSet);
+//            }
+//        });
+//
+//        return rolesSet;
+//    }
 }

@@ -25,17 +25,25 @@ export const UserRoleMapping = ({ id, name }: UserRoleMappingProps) => {
         id,
         roles: realmRoles,
       });
-      await Promise.all(
-        rows
-          .filter((row) => row.client !== undefined)
-          .map((row) =>
-            adminClient.users.addClientRoleMappings({
-              id,
-              clientUniqueId: row.client!.id!,
-              roles: [row.role as RoleMappingPayload],
-            }),
-          ),
+      const clientIds = await Promise.all(    
+          rows
+            .filter((row) => row.client !== undefined)
+            .map((row) => {
+              const role = row.role as RoleMappingPayload
+              adminClient.users.addClientRoleMappings({
+                id,
+                clientUniqueId: row.client!.id!,
+                roles: [role],
+              })
+              return row.client!.id!;
+            })
       );
+      const uniqueClientIds = Array.from(new Set(clientIds));
+      
+      await adminClient.users.regenerateJwtProofs({                
+        id,
+        clientIds: uniqueClientIds,
+      })
       addAlert(t("userRoleMappingUpdatedSuccess"), AlertVariant.success);
     } catch (error) {
       addError("roleMappingUpdatedError", error);
