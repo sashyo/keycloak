@@ -275,6 +275,16 @@ export class Groups extends Resource<{ realm?: string }> {
     urlParamKeys: ["id", "clientUniqueId"],
   });
 
+  public regenerateGroupMembersJwtProofs = this.makeRequest<
+  { id: string; clientIds: string[] },
+  void
+>({
+  method: "POST",
+  path: "/{id}/regenerate/proofs",
+  urlParamKeys: ["id"],
+  payloadKey: "clientIds",
+});
+
   /**
    * Authorization permissions
    */

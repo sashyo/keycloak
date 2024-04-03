@@ -98,13 +98,13 @@ export class Users extends Resource<{ realm?: string }> {
       path: "/profile/metadata",
     });
     
-    public regenerateJwtProofs = this.makeRequest<
+    public regenerateUserJwtProof = this.makeRequest<
     { id: string; clientIds: string[] },
     void
   >({
     method: "POST",
     path: "/{id}/regenerate/proof",
-    urlParamKeys: ["id", "clientUniqueId"],
+    urlParamKeys: ["id"],
     payloadKey: "clientIds",
   });
   /**

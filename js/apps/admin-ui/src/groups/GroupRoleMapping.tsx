@@ -36,6 +36,15 @@ export const GroupRoleMapping = ({ id, name }: GroupRoleMappingProps) => {
             }),
           ),
       );
+      /* TIDE IMPLEMENTATION START */
+      /* Regenerate jwt proof for all users in a group after an admin assigns new roles to the group. */
+      const clientIds = rows.filter((row) => row.client !== undefined).map((row) => row.client!.id!)
+      const uniqueClientIds = Array.from(new Set(clientIds));
+      await adminClient.groups.regenerateGroupMembersJwtProofs({                
+        id,
+        clientIds: uniqueClientIds,
+      })
+      /* TIDE IMPLEMENTATION END */
       addAlert(t("roleMappingUpdatedSuccess"), AlertVariant.success);
     } catch (error) {
       addError("roleMappingUpdatedError", error);

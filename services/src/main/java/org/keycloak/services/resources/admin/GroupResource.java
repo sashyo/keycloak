@@ -20,23 +20,19 @@ import jakarta.ws.rs.DefaultValue;
 import org.eclipse.microprofile.openapi.annotations.Operation;
 import org.eclipse.microprofile.openapi.annotations.extensions.Extension;
 import org.eclipse.microprofile.openapi.annotations.parameters.Parameter;
+import org.eclipse.microprofile.openapi.annotations.responses.APIResponse;
 import org.eclipse.microprofile.openapi.annotations.tags.Tag;
 import org.jboss.resteasy.reactive.NoCache;
 import jakarta.ws.rs.NotFoundException;
 import org.keycloak.common.util.ObjectUtil;
 import org.keycloak.events.admin.OperationType;
 import org.keycloak.events.admin.ResourceType;
-import org.keycloak.models.Constants;
-import org.keycloak.models.GroupModel;
-import org.keycloak.models.KeycloakSession;
-import org.keycloak.models.ModelDuplicateException;
-import org.keycloak.models.RealmModel;
+import org.keycloak.models.*;
 import org.keycloak.models.utils.KeycloakModelUtils;
 import org.keycloak.models.utils.ModelToRepresentation;
-import org.keycloak.representations.idm.GroupRepresentation;
-import org.keycloak.representations.idm.ManagementPermissionReference;
-import org.keycloak.representations.idm.UserRepresentation;
+import org.keycloak.representations.idm.*;
 import org.keycloak.services.ErrorResponse;
+import org.keycloak.services.ErrorResponseException;
 import org.keycloak.services.resources.KeycloakOpenAPI;
 import org.keycloak.services.resources.admin.permissions.AdminPermissionEvaluator;
 import org.keycloak.services.resources.admin.permissions.AdminPermissionManagement;
@@ -59,6 +55,9 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Stream;
+
+import org.keycloak.services.util.JwtProofUtil;
+import org.keycloak.storage.ReadOnlyException;
 import org.keycloak.utils.GroupUtils;
 
 import static org.keycloak.utils.StreamsUtil.paginatedStream;
@@ -371,6 +370,74 @@ public class GroupResource {
         } else {
             return new ManagementPermissionReference();
         }
+    }
+
+    @Path("regenerate/proofs")
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Tag(name = KeycloakOpenAPI.Admin.Tags.CLIENT_ROLE_MAPPINGS)
+    @Operation( summary = "re-sign client-level roles to the user role mapping")
+    @APIResponse(responseCode = "204", description = "No Content")
+    public void regenerateUsersJwtProof(@Parameter(description = "List of clients for a group that changed client roles")List<String> clientIds) {
+        auth.groups().requireManage(group);
+        try {
+            // check each subgroup aswell as initial selected group and re-sign jwt for members
+            GroupRepresentation groupRepresentation = getGroup();
+            List<GroupRepresentation> groupRepresentations = groupRepresentation.getSubGroups();
+
+
+            // Add current group to front of the list
+            groupRepresentations.add(0, groupRepresentation);
+
+            // generate jwt for current group and any subgroup members
+            for(GroupRepresentation groupRep : groupRepresentations){
+                System.out.println(groupRep.getName());
+                GroupModel group = realm.getGroupById(groupRep.getId());
+                generateJwtProofForGroupMembers(clientIds, group);
+            }
+        } catch (ModelException | ReadOnlyException me) {
+            throw new ErrorResponseException("invalid_request", "Couldn't re-sign JWT proof!", Response.Status.BAD_REQUEST);
+        }
+        adminEvent.operation(OperationType.UPDATE).resourcePath(session.getContext().getUri()).representation(clientIds).success();
+    }
+
+    private void generateJwtProofForGroupMembers(List<String> clientIds, GroupModel group){
+        int offset = 0; // Start at the beginning
+        int pageSize = Constants.DEFAULT_MAX_RESULTS;
+        List<UserRepresentation> members;
+        do {
+            // Fetch members starting at the current offset
+            members = getGroupMembers(offset, pageSize, true, group).toList();
+            // Process each fetched member
+            for (UserRepresentation userRep : members) {
+                UserModel user = session.users().getUserById(realm, userRep.getId());
+                for (String clientId : clientIds) {
+                    ClientModel client = realm.getClientById(clientId);
+                    if (client == null) {
+                        throw new NotFoundException("Client not found for ID: " + clientId);
+                    }
+                    var jwtProofUtil = new JwtProofUtil(session, auth);
+                    var newJwtProof = jwtProofUtil.getJwtProof(user, client);
+                    // Potentially do something with newJwtProof here
+                    System.out.println(newJwtProof);
+                }
+            }
+            // Increase the offset by the number of members returned to fetch the next "page"
+            offset += members.size();
+        } while (!members.isEmpty()); // Continue until no more members are returned
+    }
+
+    private Stream<UserRepresentation> getGroupMembers(Integer firstResult, Integer maxResults, Boolean briefRepresentation, GroupModel group) {
+        this.auth.groups().requireViewMembers(group);
+
+        firstResult = firstResult != null ? firstResult : 0;
+        maxResults = maxResults != null ? maxResults : Constants.DEFAULT_MAX_RESULTS;
+        boolean briefRepresentationB = briefRepresentation != null && briefRepresentation;
+
+        return session.users().getGroupMembersStream(realm, group, firstResult, maxResults)
+                .map(user -> briefRepresentationB
+                        ? ModelToRepresentation.toBriefRepresentation(user)
+                        : ModelToRepresentation.toRepresentation(session, realm, user));
     }
 
 }

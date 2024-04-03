@@ -112,8 +112,9 @@ export const deleteMapping = (type: ResourcesKey, id: string, rows: Row[]) =>
   rows.map((row) => {
     const role = { id: row.role.id!, name: row.role.name! };
     const query = mapping[type]?.delete[row.client ? 0 : 1]!;
+    console.log(mapping[type]);
 
-    return applyQuery(
+    var result = applyQuery(
       type,
       query,
       {
@@ -124,7 +125,35 @@ export const deleteMapping = (type: ResourcesKey, id: string, rows: Row[]) =>
       },
       [role],
     );
+    return result
   });
+
+/* TIDE IMPLEMENTATION START */
+export const regenerateJwtProofAfterRoleDelete = async (type: ResourcesKey, id: string, rows: Row[]) => {
+  const clientIds = rows
+  .filter((row) => row.client !== undefined)
+  .map((row) => {
+    return row.client!.id!
+  })
+  const clientUniqueIds = Array.from(new Set(clientIds));
+  console.log(type);
+
+  if (clientUniqueIds.length > 0 || clientUniqueIds !== undefined ){
+        if (type === "groups"){
+          await adminClient.groups.regenerateGroupMembersJwtProofs({
+            id,
+            clientIds: clientUniqueIds,
+          })
+        }
+        if (type === "users") {
+          await adminClient.users.regenerateUserJwtProof({                
+            id,
+            clientIds: clientUniqueIds,
+          })
+        }
+  }
+};
+/* TIDE IMPLEMENTATION END */
 
 export const getMapping = async (
   type: ResourcesKey,
@@ -183,3 +212,15 @@ export const getAvailableRoles = async (
     role,
   }));
 };
+
+// Define a type guard function
+function isDeleteFunctions(query: queryType): query is DeleteFunctions {
+  // Check if query is of type DeleteFunctions
+  return (
+      query === "delClientRoleMappings" ||
+      query === "delRealmRoleMappings" ||
+      query === "delClientScopeMappings" ||
+      query === "delRealmScopeMappings" ||
+      query === "delCompositeRoles"
+  );
+}

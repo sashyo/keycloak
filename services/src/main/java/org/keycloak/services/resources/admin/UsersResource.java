@@ -478,48 +478,6 @@ public class UsersResource {
         return toRepresentation(realm, usersEvaluator, briefRepresentation, userModels);
     }
 
-    /**
-     * Add client-level roles to the user role mapping
-     *
-     * @param clientIds
-     */
-    @Path("{userId}/regenerate/proof")
-    @POST
-    @Consumes(MediaType.APPLICATION_JSON)
-    @Tag(name = KeycloakOpenAPI.Admin.Tags.CLIENT_ROLE_MAPPINGS)
-    @Operation( summary = "resign client-level roles to the user role mapping")
-    @APIResponse(responseCode = "204", description = "No Content")
-    public void regenerateJwtProofs(@PathParam("userId")String userId,
-                                    @Parameter(description = "Client roles that have been added")List<String> clientIds) {
-        UserPermissionEvaluator userPermissionEvaluator = auth.users();
-        userPermissionEvaluator.requireQuery();
-        try {
-            for (String clientId : clientIds) {
-                ClientModel client = realm.getClientById(clientId);
-                UserModel user = session.users().getUserById(realm, userId);
-                Stream<RoleModel> clientRoles = user.getClientRoleMappingsStream(client);
-                if (!client.getId().equals(clientId)) {
-                    throw new NotFoundException("Client not found");
-                }
-                if (!user.getId().equals(userId)) {
-                    throw new NotFoundException("User not found");
-                }
-
-                var jwtProofUtil = new JwtProofUtil(session, auth);
-                clientRoles.forEach(role ->{
-                    var newJwtProof = jwtProofUtil.getJwtProof(user, client);
-                    System.out.println(newJwtProof);
-                });
-
-            }
-        } catch (ModelException | ReadOnlyException me) {
-            logger.warn(me.getMessage(), me);
-            throw new ErrorResponseException("invalid_request", "Could resign user client role mappings!", Response.Status.BAD_REQUEST);
-        }
-
-        adminEvent.operation(OperationType.UPDATE).resourcePath(session.getContext().getUri()).representation(clientIds).success();
-    }
-
     private Stream<UserRepresentation> toRepresentation(RealmModel realm, UserPermissionEvaluator usersEvaluator, Boolean briefRepresentation, Stream<UserModel> userModels) {
         boolean briefRepresentationB = briefRepresentation != null && briefRepresentation;
         boolean canViewGlobal = usersEvaluator.canView();
@@ -534,29 +492,4 @@ public class UsersResource {
                     return userRep;
                 });
     }
-
-//    private String getJwtProof(UserModel user, ClientModel client) {
-//        logger.debugf("generateExampleAccessToken invoked. User: %s, Scope param: %s", user.getUsername(), "openId");
-//
-//        // Set a specific client to a keycloak session. This is done, so we can get the scope for a client.
-//        // Clients have different scope requirement which modifies the access token that is returned.
-//        KeycloakSession newSessionForSpecificClient = session;
-//        newSessionForSpecificClient.getContext().setClient(client);
-//
-//        ClientScopeEvaluateResource clientScopeEvaluateResource = new ClientScopeEvaluateResource(newSessionForSpecificClient, session.getContext().getUri(), realm, auth, client, clientConnection);
-//
-//        ObjectMapper objMapper = new ObjectMapper();
-//        objMapper.setSerializationInclusion(JsonInclude.Include.NON_NULL);
-//
-//
-//        AccessToken accessToken = clientScopeEvaluateResource.generateExampleAccessToken("openId", user.getId());
-//
-//        try {
-//            return objMapper.writeValueAsString(accessToken);
-//
-//        } catch (JsonProcessingException e) {
-//            throw new RuntimeException(e);
-//        }
-//    }
-
 }

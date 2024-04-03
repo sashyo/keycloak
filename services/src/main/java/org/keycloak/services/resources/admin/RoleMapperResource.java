@@ -306,27 +306,4 @@ public class RoleMapperResource {
                 managePermission, viewPermission);
         return resource;
     }
-
-
-
-//    // TODO: can this be moved out somewhere else? its own file so we can manage it better.
-//    //  May be called in multiple places
-//    private Set<String> getUserRolesAndSign(Stream<RoleModel> roleModelStream) {
-//        Set<String> rolesSet = new HashSet<>();
-//
-//        //TODO: redo final form, atm just single strings per client and realm
-//        roleModelStream.forEach(role ->{
-//            if (role.isClientRole()){
-//                String clientId = role.getContainer().getId();
-//                String testRoleSet = clientId + ":" + role.getName();
-//                rolesSet.add(testRoleSet);
-//            }
-//            else {
-//                String realmTestSet = "REALM:" + role.getName();
-//                rolesSet.add(realmTestSet);
-//            }
-//        });
-//
-//        return rolesSet;
-//    }
 }

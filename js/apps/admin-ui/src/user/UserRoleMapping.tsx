@@ -25,25 +25,26 @@ export const UserRoleMapping = ({ id, name }: UserRoleMappingProps) => {
         id,
         roles: realmRoles,
       });
-      const clientIds = await Promise.all(    
-          rows
-            .filter((row) => row.client !== undefined)
-            .map((row) => {
-              const role = row.role as RoleMappingPayload
-              adminClient.users.addClientRoleMappings({
-                id,
-                clientUniqueId: row.client!.id!,
-                roles: [role],
-              })
-              return row.client!.id!;
-            })
+      await Promise.all(
+        rows
+        .filter((row) => row.client !== undefined)
+        .map((row) =>
+          adminClient.users.addClientRoleMappings({
+            id,
+            clientUniqueId: row.client!.id!,
+            roles: [row.role as RoleMappingPayload],
+          }),
+        ),
       );
+      /* TIDE IMPLEMENTATION START */
+      /* Regenerate jwt proof for a user after an admin assigns new roles to the user. */
+      const clientIds = rows.filter((row) => row.client !== undefined).map((row) => row.client!.id!)
       const uniqueClientIds = Array.from(new Set(clientIds));
-      
-      await adminClient.users.regenerateJwtProofs({                
+      await adminClient.users.regenerateUserJwtProof({                
         id,
         clientIds: uniqueClientIds,
       })
+      /* TIDE IMPLEMENTATION END */
       addAlert(t("userRoleMappingUpdatedSuccess"), AlertVariant.success);
     } catch (error) {
       addError("roleMappingUpdatedError", error);

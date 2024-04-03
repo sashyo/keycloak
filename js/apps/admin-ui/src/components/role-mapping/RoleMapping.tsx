@@ -19,7 +19,7 @@ import { useConfirmDialog } from "../confirm-dialog/ConfirmDialog";
 import { ListEmptyState } from "../list-empty-state/ListEmptyState";
 import { Action, KeycloakDataTable } from "../table-toolbar/KeycloakDataTable";
 import { AddRoleMappingModal } from "./AddRoleMappingModal";
-import { deleteMapping, getEffectiveRoles, getMapping } from "./queries";
+import { deleteMapping, getEffectiveRoles, getMapping, regenerateJwtProofAfterRoleDelete } from "./queries";
 import { getEffectiveClientRoles } from "./resource";
 
 import "./role-mapping.css";
@@ -151,6 +151,7 @@ export const RoleMapping = ({
     onConfirm: async () => {
       try {
         await Promise.all(deleteMapping(type, id, selected));
+        await regenerateJwtProofAfterRoleDelete(type, id, selected);
         addAlert(t("clientScopeRemoveSuccess"), AlertVariant.success);
         refresh();
       } catch (error) {

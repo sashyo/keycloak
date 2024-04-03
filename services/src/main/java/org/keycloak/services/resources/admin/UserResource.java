@@ -66,6 +66,7 @@ import org.keycloak.services.messages.Messages;
 import org.keycloak.services.resources.KeycloakOpenAPI;
 import org.keycloak.services.resources.LoginActionsService;
 import org.keycloak.services.resources.admin.permissions.AdminPermissionEvaluator;
+import org.keycloak.services.resources.admin.permissions.UserPermissionEvaluator;
 import org.keycloak.services.util.JwtProofUtil;
 import org.keycloak.services.validation.Validation;
 import org.keycloak.storage.ReadOnlyException;
@@ -1015,6 +1016,39 @@ public class UserResource {
         }
     }
 
+    /**
+     * Regenerate JWT proof for a user
+     *
+     * @param clientIds
+     */
+    @Path("regenerate/proof")
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Tag(name = KeycloakOpenAPI.Admin.Tags.CLIENT_ROLE_MAPPINGS)
+    @Operation( summary = "re-sign client-level roles to the user role mapping")
+    @APIResponse(responseCode = "204", description = "No Content")
+    public void regenerateUserJwtProof(@Parameter(description = "List of clients that have new role updates")List<String> clientIds) {
+        auth.users().requireManageGroupMembership(user);
+        try {
+            for (String clientId : clientIds) {
+                ClientModel client = realm.getClientById(clientId);
+                if (!client.getId().equals(clientId)) {
+                    throw new NotFoundException("Client not found");
+                }
+                var jwtProofUtil = new JwtProofUtil(session, auth);
+                // regen JWT Proof for each client that has been updated
+                var newJwtProof = jwtProofUtil.getJwtProof(user, client);
+                //TODO: SIGN IT AND STORE IN DB
+                System.out.println(newJwtProof);
+
+            }
+        } catch (ModelException | ReadOnlyException me) {
+            logger.warn(me.getMessage(), me);
+            throw new ErrorResponseException("invalid_request", "Couldn't re-sign JWT proof!", Response.Status.BAD_REQUEST);
+        }
+
+        adminEvent.operation(OperationType.UPDATE).resourcePath(session.getContext().getUri()).representation(clientIds).success();
+    }
 
 
     /**
@@ -1087,27 +1121,5 @@ public class UserResource {
             this.clientId = clientId;
             this.lifespan = lifespan;
         }
-    }
-
-    // TODO: can this be moved out somewhere else? its own file so we can manage it better.
-    //  May be called in multiple places
-    //  lives under UsersResourc.java
-    private Set<String> getUserRolesAndSign(UserModel user) {
-        Set<String> rolesSet = new HashSet<>();
-
-        //TODO: redo final form, atm just single strings per client and realm
-        user.getRoleMappingsStream().forEach(role ->{
-            if (role.isClientRole()){
-                String clientId = role.getContainer().getId();
-                String testRoleSet = clientId + ":" + role.getName();
-                rolesSet.add(testRoleSet);
-            }
-            else {
-                String realmTestSet = "REALM:" + role.getName();
-                rolesSet.add(realmTestSet);
-            }
-        });
-
-        return rolesSet;
     }
 }
