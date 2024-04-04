@@ -56,10 +56,13 @@ export const MemberModal = ({ groupId, onClose }: MemberModalProps) => {
           onClick={async () => {
             try {
               await Promise.all(
-                selectedRows.map((user) =>
+                selectedRows.map((user) => 
                   adminClient.users.addToGroup({ id: user.id!, groupId }),
                 ),
-              );
+              )
+              /** TIDE IMPLEMENTATION START */
+              selectedRows.forEach((user) => adminClient.users.regenerateGroupUserJwtProof({id: user.id!, groupId}))
+              /** TIDE IMPLEMENTATION END */
               onClose();
               addAlert(
                 t("usersAdded", { count: selectedRows.length }),

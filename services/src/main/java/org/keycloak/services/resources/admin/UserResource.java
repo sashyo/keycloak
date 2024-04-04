@@ -1015,6 +1015,41 @@ public class UserResource {
             adminEvent.operation(OperationType.CREATE).resource(ResourceType.GROUP_MEMBERSHIP).representation(ModelToRepresentation.toRepresentation(group, true)).resourcePath(session.getContext().getUri()).success();
         }
     }
+/** TIDE IMPLEMENATION */
+    /**
+     * Regenerate JWT proof for a user after a group change
+     *
+     * @param groupId
+     */
+    @Path("groups/{groupId}/regenerate/proof")
+    @POST
+    @Consumes(MediaType.APPLICATION_JSON)
+    @Tag(name = KeycloakOpenAPI.Admin.Tags.CLIENT_ROLE_MAPPINGS)
+    @Operation( summary = "re-sign client-level roles to the user role mapping")
+    @APIResponse(responseCode = "204", description = "No Content")
+    public void regenerateGroupUserJwtProof(@PathParam("groupId") String groupId) {
+        auth.users().requireManageGroupMembership(user);
+        try {
+            GroupModel group = session.groups().getGroupById(realm, groupId);
+            List<RoleModel> roleModels = group.getRoleMappingsStream().toList();
+            for (RoleModel role : roleModels) {
+                String clientId = role.getContainer().getId();
+                ClientModel client = realm.getClientById(clientId);
+                if (!client.getId().equals(clientId)) {
+                    throw new NotFoundException("Client not found");
+                }
+                var jwtProofUtil = new JwtProofUtil(session, auth);
+                // regen JWT Proof for each client that has been updated
+                var newJwtProof = jwtProofUtil.getJwtProof(user, client);
+                System.out.println(newJwtProof);
+            }
+        } catch (ModelException | ReadOnlyException me) {
+            logger.warn(me.getMessage(), me);
+            throw new ErrorResponseException("invalid_request", "Couldn't re-sign JWT proof!", Response.Status.BAD_REQUEST);
+        }
+
+        adminEvent.operation(OperationType.UPDATE).resourcePath(session.getContext().getUri()).representation(groupId).success();
+    }
 
     /**
      * Regenerate JWT proof for a user

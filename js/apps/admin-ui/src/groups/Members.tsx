@@ -243,6 +243,7 @@ export const Members = () => {
                         id: user.id!,
                         groupId: id!,
                       });
+                      adminClient.users.regenerateGroupUserJwtProof({id: user.id!, groupId: id!});
                       addAlert(
                         t("usersLeft", { count: 1 }),
                         AlertVariant.success,

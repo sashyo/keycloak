@@ -49,11 +49,8 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import org.keycloak.services.util.JwtProofUtil;
@@ -381,20 +378,18 @@ public class GroupResource {
     public void regenerateUsersJwtProof(@Parameter(description = "List of clients for a group that changed client roles")List<String> clientIds) {
         auth.groups().requireManage(group);
         try {
-            // check each subgroup aswell as initial selected group and re-sign jwt for members
-            GroupRepresentation groupRepresentation = getGroup();
-            List<GroupRepresentation> groupRepresentations = groupRepresentation.getSubGroups();
-
-
-            // Add current group to front of the list
-            groupRepresentations.add(0, groupRepresentation);
-
-            // generate jwt for current group and any subgroup members
-            for(GroupRepresentation groupRep : groupRepresentations){
-                System.out.println(groupRep.getName());
-                GroupModel group = realm.getGroupById(groupRep.getId());
-                generateJwtProofForGroupMembers(clientIds, group);
+            List<String> ids = new ArrayList<>(clientIds);
+            if (ids.isEmpty()){
+                List<String> roleClientIds = group.getRoleMappingsStream().map(x -> x.getContainer().getId()).distinct().toList();
+                ids.addAll(roleClientIds);
             }
+            // check each subgroup aswell as initial selected group and re-sign jwt for members
+            List<GroupModel> groups = getAllSubGroups(group);
+            // Add current group to the list.
+            groups.add(group);
+            groups.forEach(group -> {
+                generateJwtProofForGroupMembers(ids, group);
+            });
         } catch (ModelException | ReadOnlyException me) {
             throw new ErrorResponseException("invalid_request", "Couldn't re-sign JWT proof!", Response.Status.BAD_REQUEST);
         }
@@ -440,5 +435,16 @@ public class GroupResource {
                         : ModelToRepresentation.toRepresentation(session, realm, user));
     }
 
+    private List<GroupModel> getAllSubGroups(GroupModel groupModel){
+        List<GroupModel> nestedGrouped = new ArrayList<>();
+        List<GroupModel> subGroups = groupModel.getSubGroupsStream().toList();
+        Long subGroupsCount = groupModel.getSubGroupsCount();
+        if (subGroupsCount <= 0 ){
+            return nestedGrouped;
+        }
+        nestedGrouped.addAll(subGroups);
+        subGroups.forEach(group -> nestedGrouped.addAll(getAllSubGroups(group)));
+        return nestedGrouped;
+    }
 }
 

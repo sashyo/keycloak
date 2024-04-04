@@ -28,6 +28,7 @@ export const DeleteGroup = ({
         await adminClient.groups.del({
           id: group.id!,
         });
+        await adminClient.groups.regenerateGroupMembersJwtProofs({id: group.id!, clientIds: []})
       }
       refresh();
       addAlert(t("groupDeleted", { count: selectedRows.length }));
